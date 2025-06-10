@@ -7,7 +7,7 @@ def main():
     pipe = DiffusionPipeline.from_pretrained(MODEL_NAME)
     pipe.save_pretrained(SAVE_PATH)
 
-    MODEL_NAMEM = "nlpconnect/vit-gpt2-image-captioning"
+    MODEL_NAME = "nlpconnect/vit-gpt2-image-captioning"
     SAVE_PATH = "./images2text_model"
     pipe = pipeline("image-to-text", MODEL_NAME)
     pipe.save_pretrained(SAVE_PATH)
