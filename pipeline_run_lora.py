@@ -1,42 +1,44 @@
-import os
 import torch
-import uuid
-from typing import Union, Optional, Iterable
+from typing import Optional
 from diffusers import StableDiffusionPipeline
 from peft import PeftModel
 
-path_lora_weights = "./Lora_folder/cyberpunk_lora_r64"
-path_save_images = f"{path_lora_weights}/images"
-path_sd_model = './models/tiny-sd-segmind'
-num_inference_steps = 32
-guidance_scale = 7.5
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
+# TODO предусмотреть выпиливание прошлых лора и добавление новой
+class PipelineRunLora:
+    def __init__(self,
+                 models_t2i_diffusion_path: str,
+                 path_lora: Optional[str]):
+        self.models_t2i_diffusion_path = models_t2i_diffusion_path
+        self.path_lora = path_lora
 
-#TODO в идеале рассмотреть вариант отброса старой lora
-#тоже формат использвоания многогранен
-def pipeline_generate_images_and_save(path_model_sd: str,
-                             path_save_image: str,
-                             prompt: Union[str, list],
-                             num_inference_steps=50,
-                             path_sd_model: Optional[str] = None):
-    os.makedirs(path_save_images, exist_ok=True)
-    t2i_pipeline = StableDiffusionPipeline.from_pretrained(path_model_sd,
-                                                           local_files_only=True).to(device)
-    if path_sd_model:
-        t2i_pipeline.unet = PeftModel.from_pretrained(t2i_pipeline.unet, path_lora_weights)
-        t2i_pipeline.unet.set_adapter("default")
-        t2i_pipeline.unet.set_adapters(["default"], weights=[1.0])
-        t2i_pipeline.unet = t2i_pipeline.unet.merge_and_unload()
+    def generate_images(self,
+                        prompts: list,
+                        num_inference_steps: int = 50,
+                        guidance_scale: float = 7.5,
+                        weight_lora: float = 1.):
+        """
+        list[text] -> list[image]
+        :param prompts: list[text] for generation
+        :param num_inference_steps:
+        :param guidance_scale:
+        :param weight_lora:
+        :return: list[image]
+        """
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        t2i_pipeline = StableDiffusionPipeline.from_pretrained(self.models_t2i_diffusion_path,
+                                                               local_files_only=True).to(device)
+        if self.path_lora:
+            t2i_pipeline.unet = PeftModel.from_pretrained(t2i_pipeline.unet, self.path_lora)
+            t2i_pipeline.unet.set_adapter("default")
+            t2i_pipeline.unet.set_adapters(["default"], weights=[weight_lora])
+            t2i_pipeline.unet = t2i_pipeline.unet.merge_and_unload()
 
-    if isinstance(prompt, str):
-        image = t2i_pipeline(prompt,
-                             num_inference_steps=num_inference_steps,
-                             guidance_scale=guidance_scale).images[0]
-        image.save(os.path.join(path_save_image), f"/{str(uuid.uuid4())}.png")
-    elif isinstance(prompt, Iterable):
-        for text in prompt:
-            image = t2i_pipeline(text,
+        images = []
+        for prompt in prompts:
+            image = t2i_pipeline(prompt,
                                  num_inference_steps=num_inference_steps,
                                  guidance_scale=guidance_scale).images[0]
-            image.save(os.path.join(path_save_image), f"/{str(uuid.uuid4())}.png")
+            images.append(image)
+
+        return images

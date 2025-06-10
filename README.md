@@ -19,11 +19,11 @@ __download tiny models to local__
 
 <code>python3 -m pipeline_learn_lora</code>
 
-__pipeline_run_lora.py__ - загатовка pipeline обучения lora для дальнейшего улучшения
+__pipeline_fit_lora.py__ - пайплайн обучение нескольких версий лора
 
-__usefull_scripts/generate_img_for_lora_version.py__ - для разных версий лоры сгенерировать изображения по тестовым промптам и положить их рядышком
+__pipeline_run_lora.py__ - паплайн получения картинок из дифузии
 
-__usefull_scripts/create_text_from_dir.py__ - рядом с картинками положить файл с их описаниями
+__main.py__ - запуск обоих пайплайнов
 
 example (left no lora | add lora): 
 style acrylic paints

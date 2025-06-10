@@ -13,7 +13,7 @@ from prodigyopt import Prodigy
 
 from dataset import DatasetImageFromPath
 
-
+# TODO need add interface
 class PipelineLearnLora:
     def __init__(self):
         self.dataset = None
@@ -68,22 +68,25 @@ class PipelineLearnLora:
 
         self.dataloader = DataLoader(self.dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
 
-    def learn_lora(self,
-                   path_save_lora,
-                   device,
-                   lora_config: LoraConfig,
-                   num_epochs: int = 128,
-                   every_epoch_save_lora: int = 5,
-                   start_epoch_save: int = 10,
-                   **params
-                   ):
+    def fit_lora(self,
+                 path_save_lora,
+                 device,
+                 lora_config: dict,
+                 optimizator_params: dict,
+                 num_epochs: int = 128,
+                 every_epoch_save_lora: int = 5,
+                 start_epoch_save: int = 10,
+                 **params
+                 ):
+        """
+        :param lora_config: https://huggingface.co/docs/peft/main/en/package_reference/lora
+        :param optimizator_params: https://github.com/konstmish/prodigy/blob/main/prodigyopt/prodigy.py
+        :return: None
+        """
+        lora_config = LoraConfig(**lora_config)
         os.makedirs(path_save_lora, exist_ok=True)
         optimizer = Prodigy(self.unet.parameters(),
-                            lr=1.0,
-                            weight_decay=0.01,
-                            betas=(0.9, 0.99),
-                            safeguard_warmup=True,
-                            use_bias_correction=True)
+                            **optimizator_params)
         self.unet = get_peft_model(self.unet, lora_config)
         logger.info(self.unet.print_trainable_parameters())
         self.unet.to(device)
@@ -113,14 +116,14 @@ class PipelineLearnLora:
                     target = noisy_images.get_velocity(latents, noise, timesteps)
 
                 # Loss и backward
+                optimizer.zero_grad(set_to_none=True)
                 loss = torch.nn.functional.mse_loss(noise_pred, target, reduction="mean")
                 loss.backward()
                 optimizer.step()
                 # lr_scheduler.step(
-                optimizer.zero_grad()
                 total_train_loss += loss.item()
 
-            logger.info((f"Epoch {epoch + 1} Done"))
+            logger.info(f"Epoch {epoch + 1} Done")
 
             if (epoch % every_epoch_save_lora == 0) and epoch >= start_epoch_save:
                 os.makedirs(os.path.join(path_save_lora, f"{epoch}"))
@@ -128,40 +131,57 @@ class PipelineLearnLora:
 
         self.unet.save_pretrained(os.path.join(path_save_lora, f"{epoch}_last"))
 
-    def run_pipeline_learn_lora(self,
-                                images_dir,
-                                models_t2i_diffusion_path,
-                                models_i2t_path,
-                                path_save_lora,
-                                lora_config,
-                                learn_lora_params
-                                ):
+    def run_pipeline_fit_lora(self,
+                              images_dir,
+                              models_t2i_diffusion_path,
+                              models_i2t_path,
+                              path_save_lora,
+                              lora_config,
+                              optimizator_params,
+                              fit_lora_params
+                              ):
         logger.info("start run pipeline")
         device = "cuda" if torch.cuda.is_available() else "cpu"
         self.load_model(models_t2i_diffusion_path, device)
         self.create_dataset(images_dir, models_i2t_path, device)
-        self.create_dataloader(**learn_lora_params)
-        self.learn_lora(path_save_lora, device, lora_config, **learn_lora_params)
+        self.create_dataloader(**fit_lora_params)
+        self.fit_lora(path_save_lora=path_save_lora,
+                      device=device,
+                      lora_config=lora_config,
+                      optimizator_params=optimizator_params,
+                      **fit_lora_params)
         logger.info("pipeline done")
 
 
 if __name__ == "__main__":
-    lora_config = LoraConfig(
-        r=64,
-        lora_alpha=128,
-        target_modules=["to_q", "to_k", "to_v", "to_out.0"],
-        lora_dropout=0.1,
-    )
-    learn_lora_params = {"batch_size": 2,
-                         "num_epochs": 128,
-                         "every_epoch_save_lora": 5,
-                         "start_epoch_save": 10}
+    lora_config = {"r": 64,
+                   "lora_alpha": 128,
+                   "target_modules": ["to_q", "to_k", "to_v", "to_out.0"],
+                   "lora_dropout": 0.1}
+
+    optimizator_params = {"lr": 1.0,
+                          "weight_decay": 0.01,
+                          "betas": (0.9, 0.99),
+                          "safeguard_warmup": True,
+                          "use_bias_correction": True}
+
+    fit_lora_params = {"batch_size": 2,
+                       "num_epochs": 128,
+                       "every_epoch_save_lora": 5,
+                       "start_epoch_save": 10}
+
+    images_dir = "./small_datasets/cyberpunk"
+    models_t2i_diffusion_path = "./models/tiny-sd-segmind"
+    models_i2t_path = "./models/images2text_model"
+    path_save_lora = './Lora_folder/cyberpunk_lora_r64_no_gausine'
+    image_save_path = './Lora_folder/cyberpunk_lora_r64_no_gausine/images'
 
     pipe = PipelineLearnLora()
-    pipe.run_pipeline_learn_lora(images_dir="./small_datasets/cyberpunk",
-                                 models_t2i_diffusion_path="./models/tiny-sd-segmind",
-                                 models_i2t_path="./models/images2text_model",
-                                 path_save_lora='./Lora_folder/cyberpunk_lora_r64_no_gausine',
-                                 lora_config=lora_config,
-                                 learn_lora_params=learn_lora_params
-                                 )
+    pipe.run_pipeline_fit_lora(images_dir=images_dir,
+                               models_t2i_diffusion_path=models_t2i_diffusion_path,
+                               models_i2t_path=models_i2t_path,
+                               path_save_lora=path_save_lora,
+                               lora_config=lora_config,
+                               optimizator_params=optimizator_params,
+                               fit_lora_params=fit_lora_params
+                               )
