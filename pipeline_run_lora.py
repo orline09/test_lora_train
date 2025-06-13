@@ -16,7 +16,8 @@ class PipelineRunLora:
                         prompts: list,
                         num_inference_steps: int = 50,
                         guidance_scale: float = 7.5,
-                        weight_lora: float = 1.):
+                        weight_lora: float = 1.,
+                        word_style: Optional[str] = None):
         """
         list[text] -> list[image]
         :param prompts: list[text] for generation
@@ -36,6 +37,8 @@ class PipelineRunLora:
 
         images = []
         for prompt in prompts:
+            if word_style:
+                prompt = f"{word_style} " + prompt
             image = t2i_pipeline(prompt,
                                  num_inference_steps=num_inference_steps,
                                  guidance_scale=guidance_scale).images[0]
